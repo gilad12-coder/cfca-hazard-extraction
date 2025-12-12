@@ -120,7 +120,7 @@ class AsyncHazardExtractionService:
 
         field_values = await self._predict_fields_concurrently(incident_text, modules_to_run)
         try:
-            hazard = HazardReport(**field_values)
+            hazard = HazardReport.model_validate(field_values, from_attributes=False)
             payload = hazard.model_dump(by_alias=True, exclude_none=False)
             payload.setdefault("symptoms", hazard.symptoms or [])
             return payload
