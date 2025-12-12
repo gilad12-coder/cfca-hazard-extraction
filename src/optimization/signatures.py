@@ -218,19 +218,35 @@ class HomeAddressSignature(dspy.Signature):
 
 class CommentsSignature(dspy.Signature):
     """
-    Extract relevant contextual details from Hebrew environmental hazard reports that do not fit into standard structured fields.
+    Acts as a strict content filter for environmental hazard reports based on the 'Residue Principle'.
 
-    Focus on extracting:
-    1. Temporal context (e.g., "happening every night", "started 2 hours ago", "recurring").
-    2. Specific source identification (e.g., "from the illegal dump", "neighbors in X village").
-    3. Impact on daily life (e.g., "cannot open windows", "woke us up", "cannot breathe").
-    4. Specific material descriptions if not standard (e.g., "rubber", "medical waste").
+    The goal is to extract **only** valuable narrative context that was NOT captured in structured fields (Location, Smell Type, Intensity, Symptoms).
 
-    Do not repeat the report type or standard intensity unless it adds necessary context.
+    ### INSTRUCTIONS:
+    1. **FILTER OUT (REMOVE):**
+       - **Structured Data:** Any text describing Location, Smell Description (e.g., "strong burning smell"), or standard Symptoms (e.g., "hard to breathe", "burning eyes").
+       - **Trivialities:** Greetings (e.g., "Hi", "Good morning") and small talk.
+       - **Offensive Content:** Curse words, profanity, or racist remarks.
+
+    2. **KEEP (THE RESIDUE):**
+       - **Temporal/Frequency:** Information about duration or repetition (e.g., "happening every night", "started 2 hours ago").
+       - **Personal Vulnerability:** Specific personal context (e.g., "I am pregnant", "my asthmatic child", "we are suffocating").
+       - **Requests/Pleas:** Direct appeals to authorities (e.g., "please handle this", "urgent").
+       - **Specific Source Narrative:** Narrative details about the source (e.g., "neighbors in X village are burning tires").
+
+    3. **FORMATTING:**
+       - **Do NOT summarize.** Extract the relevant text substrings exactly as they appear (verbatim).
+       - **Do NOT translate.** Keep the text in the original language (Hebrew or English).
+       - If no text remains after filtering, return an empty string.
     """
-    incident_text: str = dspy.InputField(desc="Raw incident narrative in Hebrew.")
+
+    incident_text: str = dspy.InputField(
+        desc="The raw, original incident narrative text submitted by the user."
+    )
+
     comments: str = dspy.OutputField(
-        desc="Concise Hebrew summary of the additional context. Return an empty string if no relevant extra info exists.")
+        desc="The extracted residual text string. Must be verbatim from input. Returns an empty string if all content is filtered out."
+    )
 
 # --- MAPPING ---
 
