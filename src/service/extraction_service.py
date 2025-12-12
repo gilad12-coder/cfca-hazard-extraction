@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -70,6 +71,8 @@ class AsyncHazardExtractionService:
         configure_inference_lm()
         # Create a thread pool executor with more workers for parallel LLM calls
         self._executor = ThreadPoolExecutor(max_workers=16)
+        # In-memory cache for identical extractions
+        self._result_cache: Dict[str, Dict[str, Any]] = {}
 
     @classmethod
     def from_artifacts(
@@ -110,6 +113,16 @@ class AsyncHazardExtractionService:
         Returns:
             Dict keyed by schema field aliases with extracted values.
         """
+        # Generate cache key from incident text
+        cache_key = hashlib.md5(incident_text.encode()).hexdigest()
+
+        # Check cache for full extraction
+        if cache_key in self._result_cache:
+            cached = self._result_cache[cache_key]
+            if requested_fields:
+                return {k: cached[k] for k in requested_fields if k in cached}
+            return cached
+
         if requested_fields:
             missing = [f for f in requested_fields if f not in self.field_modules]
             if missing:
@@ -123,12 +136,14 @@ class AsyncHazardExtractionService:
             hazard = HazardReport.model_validate(field_values, from_attributes=False)
             payload = hazard.model_dump(by_alias=True, exclude_none=False)
             payload.setdefault("symptoms", hazard.symptoms or [])
-            return payload
         except ValidationError as exc:
             logger.warning(f"Schema validation failed; returning raw field outputs. Details: {exc}")
             payload = {field: field_values.get(field) for field in FIELDS}
             payload.setdefault("symptoms", field_values.get("symptoms") or [])
-            return payload
+
+        # Cache the result
+        self._result_cache[cache_key] = payload
+        return payload
 
     async def _predict_fields_concurrently(
             self,
