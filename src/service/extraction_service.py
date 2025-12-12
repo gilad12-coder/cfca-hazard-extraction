@@ -1,4 +1,5 @@
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Annotated, Dict, Mapping, Sequence, cast
@@ -67,6 +68,8 @@ class AsyncHazardExtractionService:
         if not self.field_modules:
             raise ValueError("At least one field module is required.")
         configure_inference_lm()
+        # Create a thread pool executor with more workers for parallel LLM calls
+        self._executor = ThreadPoolExecutor(max_workers=16)
 
     @classmethod
     def from_artifacts(
@@ -147,8 +150,9 @@ class AsyncHazardExtractionService:
             if field in modules
         ]
 
+        loop = asyncio.get_event_loop()
         tasks = [
-            self._predict_single_field(field, module, incident_text)
+            loop.run_in_executor(self._executor, self._predict_single_field_sync, field, module, incident_text)
             for field, module in ordered_items
         ]
 
@@ -156,10 +160,10 @@ class AsyncHazardExtractionService:
         return dict(results)
 
     @staticmethod
-    async def _predict_single_field(
+    def _predict_single_field_sync(
             field: str, module: dspy.Module, incident_text: str
     ) -> tuple[str, Any]:
-        """Run a single field extractor in a worker thread to avoid blocking the event loop.
+        """Run a single field extractor synchronously in a thread pool worker.
 
         Args:
             field: The schema field name.
@@ -170,7 +174,7 @@ class AsyncHazardExtractionService:
             Tuple of (field_name, predicted_value).
         """
         try:
-            prediction = await asyncio.to_thread(module, incident_text=incident_text)
+            prediction = module(incident_text=incident_text)
             value = getattr(prediction, field, None)
             logger.debug(f"[{field}] Predicted value: {value}")
             return field, value
@@ -201,6 +205,10 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    # Cleanup
+    service = getattr(app_state, "extraction_service", None)
+    if service is not None:
+        service._executor.shutdown(wait=True)
     app_state.extraction_service = None
 
 
