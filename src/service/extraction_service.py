@@ -2,6 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Annotated, Dict, Mapping, Sequence, cast
+from functools import lru_cache
 
 import dspy
 from fastapi import FastAPI, HTTPException, Request, Depends
@@ -66,6 +67,7 @@ class AsyncHazardExtractionService:
         self.field_modules = dict(field_modules)
         if not self.field_modules:
             raise ValueError("At least one field module is required.")
+        self._extraction_cache: Dict[str, Dict[str, Any]] = {}
         configure_inference_lm()
 
     @classmethod
@@ -107,6 +109,14 @@ class AsyncHazardExtractionService:
         Returns:
             Dict keyed by schema field aliases with extracted values.
         """
+        # Check cache first
+        cache_key = incident_text
+        if cache_key in self._extraction_cache:
+            cached_result = self._extraction_cache[cache_key]
+            if requested_fields:
+                return {k: cached_result[k] for k in requested_fields if k in cached_result}
+            return cached_result
+
         if requested_fields:
             missing = [f for f in requested_fields if f not in self.field_modules]
             if missing:
@@ -120,12 +130,14 @@ class AsyncHazardExtractionService:
             hazard = HazardReport(**field_values)
             payload = hazard.model_dump(by_alias=True, exclude_none=False)
             payload.setdefault("symptoms", hazard.symptoms or [])
-            return payload
         except ValidationError as exc:
             logger.warning(f"Schema validation failed; returning raw field outputs. Details: {exc}")
             payload = {field: field_values.get(field) for field in FIELDS}
             payload.setdefault("symptoms", field_values.get("symptoms") or [])
-            return payload
+
+        # Cache the result
+        self._extraction_cache[cache_key] = payload
+        return payload
 
     async def _predict_fields_concurrently(
             self,
