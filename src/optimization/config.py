@@ -38,9 +38,10 @@ def _require_api_key() -> str:
 OPENAI_API_KEY = _require_api_key()
 
 INFERENCE_LM = {
-    "model": "openai/gpt-4o-mini",
-    "max_tokens": 500,
-    "temperature": 0.0,
+    "model": "openai/gpt-5-mini",
+    "max_tokens": 16000,
+    "temperature": 1.0,
+    "reasoning_effort": "low",
     "api_key": OPENAI_API_KEY,
 }
 
