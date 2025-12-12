@@ -1,0 +1,48 @@
+# .gcloudignore - Files to exclude from Cloud Run deployment
+
+# Version control
+.git
+.gitignore
+
+# Environment files
+.env
+.env.local
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Virtual environments
+venv/
+env/
+clean_venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Development
+.editorconfig
+.pre-commit-config.yaml
+pytest.ini
+tox.ini
+
+# Optional: Exclude railway config if not needed in Cloud Run
+railway.json
+
+# Optional: Exclude optimization main if only serving
+# src/optimization/main.py
