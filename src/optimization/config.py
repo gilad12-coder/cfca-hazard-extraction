@@ -29,7 +29,7 @@ def _require_api_key() -> str:
     Returns:
         str: The API key from the environment; raises if missing.
     """
-    key = os.getenv("OPENAI_API_KEY")
+    key = os.getenv("OPENAI_API_KEY", "")
     if not key:
         raise RuntimeError("OPENAI_API_KEY environment variable is not set. Export your key before running the optimizer.")
     return key
