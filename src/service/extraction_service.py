@@ -285,6 +285,33 @@ async def extract_incident_to_json(
     return await service.extract(incident_text, requested_fields=fields)
 
 
+def _normalize_result_for_bot(result: Mapping[str, Any]) -> Dict[str, Any]:
+    """Prepare extraction output for the bot action schema.
+
+    Args:
+        result: Raw extraction payload keyed by field alias.
+
+    Returns:
+        Dictionary containing normalized values (empty string for null-like).
+    """
+    normalized: Dict[str, Any] = {}
+    for field in FIELDS:
+        value = result.get(field)
+        normalized[field] = "" if value is None else value
+    return normalized
+
+
+def _wrap_actions_payload(result: Mapping[str, Any]) -> Dict[str, Any]:
+    """Wrap extracted fields in the bot's expected SetParameter/Return format."""
+    normalized = _normalize_result_for_bot(result)
+    actions: list[Dict[str, Any]] = [
+        {"type": "SetParameter", "name": field, "value": normalized[field]}
+        for field in FIELDS
+    ]
+    actions.append({"type": "Return", "value": normalized})
+    return {"actions": actions}
+
+
 @app.post("/extract")
 async def extract_endpoint(
         request: ExtractionRequest,
@@ -297,7 +324,7 @@ async def extract_endpoint(
         service: Injected extraction service instance.
 
     Returns:
-        Dict containing a data field with extracted schema values.
+        Dict with an actions list (SetParameter entries followed by Return).
 
     Raises:
         HTTPException: If the extraction process encounters an unhandled error.
@@ -307,7 +334,7 @@ async def extract_endpoint(
             request.incident_text,
             requested_fields=request.fields
         )
-        return {"data": result}
+        return _wrap_actions_payload(result)
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
