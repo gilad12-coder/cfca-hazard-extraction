@@ -49,10 +49,10 @@ USE_MIXED_PROVIDERS = os.environ.get("USE_MIXED_PROVIDERS", "true").lower() == "
 
 def _get_google_api_key() -> str:
     """Load Google API key from environment variable."""
-    key = os.environ.get("GOOGLE_API_KEY")
+    key = os.environ.get("GEMINI_API_KEY")
     if not key:
         raise ValueError(
-            "GOOGLE_API_KEY environment variable is not set. "
+            "GEMINI_API_KEY environment variable is not set. "
             "Please set it in your .env file or environment."
         )
     return key
