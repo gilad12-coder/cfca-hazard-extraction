@@ -14,7 +14,10 @@ htmlcov/
 # Virtual environments
 venv/
 env/
-clean_venv/
+.venv/
+
+# UV
+uv.lock
 
 # IDE
 .idea/
@@ -36,3 +39,12 @@ Thumbs.db
 .pre-commit-config.yaml
 pytest.ini
 tox.ini
+
+# Logs (keep .gitkeep)
+logs/*.log
+
+# Old venv (deprecated)
+clean_venv/
+
+# Ruff cache
+.ruff_cache/

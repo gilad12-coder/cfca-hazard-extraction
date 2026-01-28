@@ -1,7 +1,9 @@
 from pathlib import Path
 from random import Random
+
 from loguru import logger
-from src.optimization.config import DEFAULT_WORKBOOK
+
+from src.optimization.config import ARTIFACT_DIR, DEFAULT_WORKBOOK
 from src.optimization.data import load_hazard_examples
 from src.optimization.optimizer import HazardSchemaOptimizer
 
@@ -29,7 +31,10 @@ def main() -> None:
         f"validation examples (seed={SPLIT_SEED})."
     )
 
-    optimizer = HazardSchemaOptimizer(track_stats=True)
+    optimizer = HazardSchemaOptimizer(
+        track_stats=True,
+        artifact_dir=str(ARTIFACT_DIR),
+    )
     program = optimizer.optimize_schema(
         train_records,
         val_records=val_records,

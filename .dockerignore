@@ -49,8 +49,5 @@ htmlcov/
 # CI/CD
 .github/workflows/
 
-# Optional: Exclude railway config
-railway.json
-
 # Optional: Exclude optimization main if only serving
 # src/optimization/main.py
