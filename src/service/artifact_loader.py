@@ -1,17 +1,38 @@
+import os
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Sequence
+from typing import Dict, Optional, Sequence
 
 import dspy
 from loguru import logger
 
-from ..optimization.config import INFERENCE_LM
+from ..optimization.config import (
+    ARTIFACT_ROOTS,
+    INFERENCE_LM,
+    get_provider_lm_config,
+)
 from ..optimization.constants import FIELDS
 from ..optimization.optimizer import HazardSchemaProgram
+from .model_selector import FieldSelection, ModelSelector
 
-DEFAULT_ARTIFACT_ROOT = Path(__file__).resolve().parent.parent.parent / "artifacts"
+# Configurable via ARTIFACTS_DIR env var (defaults to artifacts_openai)
+_default_artifacts = Path(__file__).resolve().parent.parent.parent / "artifacts_openai"
+DEFAULT_ARTIFACT_ROOT = Path(os.environ.get("ARTIFACTS_DIR", str(_default_artifacts)))
 DEFAULT_STAGE = "gepa"
 
 _lm_configured = False
+
+
+@dataclass
+class LoadedFieldModule:
+    """A loaded DSPy module with its associated provider and LM."""
+
+    field: str
+    module: dspy.Module
+    provider: str
+    lm: dspy.LM
+    score: float
+
 
 def configure_inference_lm() -> None:
     """Configure DSPy with the shared inference LM.
@@ -138,3 +159,99 @@ def load_schema_program(
         fields=fields, artifact_root=artifact_root, stage=stage, allow_partial=allow_partial
     )
     return HazardSchemaProgram(field_modules=modules)
+
+
+class MixedProviderLoader:
+    """Load field artifacts from multiple providers based on score selection."""
+
+    def __init__(
+        self,
+        provider_roots: Optional[Dict[str, Path]] = None,
+        stage: str = DEFAULT_STAGE,
+    ):
+        """Initialize the mixed provider loader.
+
+        Args:
+            provider_roots: Mapping of provider names to artifact directories.
+                           Defaults to ARTIFACT_ROOTS from config.
+            stage: Stage subdirectory name (e.g., "gepa").
+        """
+        self.provider_roots = {
+            k: Path(v) for k, v in (provider_roots or ARTIFACT_ROOTS).items()
+        }
+        self.stage = stage
+        self._selector = ModelSelector(self.provider_roots)
+        self._provider_lms: Dict[str, dspy.LM] = {}
+
+    def _get_or_create_lm(self, provider: str) -> dspy.LM:
+        """Get or create LM instance for a provider.
+
+        Args:
+            provider: Provider name ("openai" or "gemini").
+
+        Returns:
+            Configured dspy.LM instance for the provider.
+        """
+        if provider not in self._provider_lms:
+            config = get_provider_lm_config(provider)
+            self._provider_lms[provider] = dspy.LM(**config)
+        return self._provider_lms[provider]
+
+    def load_best_field_modules(
+        self,
+        fields: Optional[Sequence[str]] = None,
+        default_provider: str = "openai",
+    ) -> Dict[str, LoadedFieldModule]:
+        """Load the best-scoring artifact for each field from any provider.
+
+        Args:
+            fields: Subset of fields; None loads all available.
+            default_provider: Tie-breaker preference.
+
+        Returns:
+            Dict mapping field name to LoadedFieldModule.
+        """
+        selections = self._selector.select_best_providers(
+            fields=fields,
+            default_provider=default_provider,
+        )
+
+        loaded: Dict[str, LoadedFieldModule] = {}
+
+        for field, selection in selections.items():
+            artifact_path = selection.artifact_path
+            if not artifact_path.exists():
+                logger.warning(f"Artifact path does not exist: {artifact_path}")
+                continue
+
+            # Get the LM for this provider
+            lm = self._get_or_create_lm(selection.selected_provider)
+
+            # Configure DSPy globally for this load operation
+            dspy.configure(lm=lm)
+
+            try:
+                module = dspy.load(artifact_path)
+                loaded[field] = LoadedFieldModule(
+                    field=field,
+                    module=module,
+                    provider=selection.selected_provider,
+                    lm=lm,
+                    score=selection.selected_score,
+                )
+                logger.debug(
+                    f"Loaded '{field}' from {selection.selected_provider} "
+                    f"(score={selection.selected_score:.4f})"
+                )
+            except Exception as e:
+                logger.error(f"Failed to load '{field}' from {artifact_path}: {e}")
+
+        # Log summary by provider
+        provider_fields: Dict[str, list[str]] = {}
+        for field, mod in loaded.items():
+            provider_fields.setdefault(mod.provider, []).append(field)
+
+        for provider, fields_list in sorted(provider_fields.items()):
+            logger.info(f"Using {provider} for {len(fields_list)} fields: {', '.join(sorted(fields_list))}")
+
+        return loaded

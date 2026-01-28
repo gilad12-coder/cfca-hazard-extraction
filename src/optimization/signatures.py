@@ -1,4 +1,5 @@
-from typing import Literal, Optional, List
+from typing import List, Literal, Optional
+
 import dspy
 
 from .constants import (
@@ -9,15 +10,14 @@ from .constants import (
     FIELD_EVENT_TIME,
     FIELD_HOME_ADDRESS,
     FIELD_LOCATION,
+    FIELD_REPORT_TYPE,
     FIELD_REPORTER_LOCATION,
     FIELD_REPORTER_NAME,
-    FIELD_REPORT_TYPE,
     FIELD_SMELL_INTENSITY,
     FIELD_SMELL_TYPE,
     FIELD_SMOKE_COLOR,
     FIELD_SYMPTOMS,
 )
-
 
 # --- 1. CORE CLASSIFICATION SIGNATURES ---
 

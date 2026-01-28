@@ -41,8 +41,5 @@ Thumbs.db
 pytest.ini
 tox.ini
 
-# Optional: Exclude railway config if not needed in Cloud Run
-railway.json
-
 # Optional: Exclude optimization main if only serving
 # src/optimization/main.py

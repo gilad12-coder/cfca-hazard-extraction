@@ -6,9 +6,9 @@ from typing import Dict, Mapping, Optional, Sequence
 
 import dspy
 from dspy.evaluate import Evaluate
+from dspy.teleprompt import GEPA
 from loguru import logger
 from pydantic import ValidationError
-from dspy.teleprompt import GEPA
 
 from .config import FIELD_BEHAVIORS, INFERENCE_LM, TEACHER_LM
 from .constants import FIELD_SPECS, FIELDS
@@ -364,13 +364,15 @@ class HazardSchemaOptimizer:
         """
         gepa = GEPA(
             metric=gepa_metric,
-            auto=None,
-            max_metric_calls=200,
+            auto="heavy",
             reflection_lm=self.reflection_lm,
             track_stats=self.track_stats,
             log_dir=self._scoped_log_dir(self.gepa_log_dir, field),
             candidate_selection_strategy="pareto",
-            reflection_minibatch_size=5,
+            reflection_minibatch_size=10,
+            num_threads=8,
+            max_merge_invocations=10,
+            use_merge=True,
         )
         gepa_compiled = gepa.compile(
             student=program,

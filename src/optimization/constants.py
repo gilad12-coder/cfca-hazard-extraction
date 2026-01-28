@@ -1,6 +1,5 @@
 from typing import Dict, Mapping, Sequence
 
-
 # Generic literal tokens reused across schema specs.
 NULL_LITERAL: str = "null"
 STRING_LITERAL: str = "string"

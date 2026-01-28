@@ -1,20 +1,24 @@
 import asyncio
 import hashlib
+import os
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Annotated, Dict, Mapping, Sequence, cast
+from typing import Annotated, Any, Dict, Mapping, Sequence, Union, cast
 
 import dspy
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import Depends, FastAPI, HTTPException, Request
 from loguru import logger
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
+from ..optimization.config import USE_MIXED_PROVIDERS
 from ..optimization.constants import FIELDS
 from ..optimization.schema import HazardReport
 from .artifact_loader import (
     DEFAULT_ARTIFACT_ROOT,
     DEFAULT_STAGE,
+    LoadedFieldModule,
+    MixedProviderLoader,
     configure_inference_lm,
     load_field_programs,
 )
@@ -54,21 +58,30 @@ class ExtractionRequest(BaseModel):
 
 
 class AsyncHazardExtractionService:
-    """Run Chain-of-Thought field extractors concurrently."""
+    """Run Chain-of-Thought field extractors concurrently with per-field LM routing."""
 
-    def __init__(self, field_modules: Mapping[str, dspy.Module]):
+    def __init__(
+        self,
+        field_modules: Union[Mapping[str, dspy.Module], Mapping[str, LoadedFieldModule]],
+        use_mixed_providers: bool = False,
+    ):
         """Create a service backed by preloaded field modules.
 
         Args:
-            field_modules: Mapping of schema field names to DSPy modules.
+            field_modules: Mapping of schema field names to DSPy modules or LoadedFieldModule.
+            use_mixed_providers: Whether modules are LoadedFieldModule with per-field LM.
 
         Raises:
             ValueError: If no field modules are provided.
         """
         self.field_modules = dict(field_modules)
+        self._use_mixed_providers = use_mixed_providers
         if not self.field_modules:
             raise ValueError("At least one field module is required.")
-        configure_inference_lm()
+
+        if not use_mixed_providers:
+            configure_inference_lm()
+
         # Create a thread pool executor with more workers for parallel LLM calls
         self._executor = ThreadPoolExecutor(max_workers=16)
         # In-memory cache for identical extractions
@@ -97,7 +110,36 @@ class AsyncHazardExtractionService:
             stage=stage,
             allow_partial=allow_partial,
         )
-        return cls(modules)
+        return cls(modules, use_mixed_providers=False)
+
+    @classmethod
+    def from_best_artifacts(
+        cls,
+        default_provider: str = "openai",
+        allow_partial: bool = False,
+    ) -> "AsyncHazardExtractionService":
+        """Instantiate service by loading best-scoring artifacts from all providers.
+
+        This method compares evaluation scores from all available providers
+        and loads the best-performing artifact for each field.
+
+        Args:
+            default_provider: Tie-breaker when scores are equal.
+            allow_partial: Whether to skip missing artifacts instead of raising.
+
+        Returns:
+            AsyncHazardExtractionService with mixed-provider modules.
+        """
+        loader = MixedProviderLoader()
+        modules = loader.load_best_field_modules(
+            fields=None,
+            default_provider=default_provider,
+        )
+
+        if not modules and not allow_partial:
+            raise FileNotFoundError("No artifacts found in any provider directory")
+
+        return cls(modules, use_mixed_providers=True)
 
     async def extract(
             self,
@@ -148,13 +190,13 @@ class AsyncHazardExtractionService:
     async def _predict_fields_concurrently(
             self,
             incident_text: str,
-            modules: Dict[str, dspy.Module]
+            modules: Dict[str, Union[dspy.Module, LoadedFieldModule]]
     ) -> Dict[str, Any]:
         """Run selected modules concurrently.
 
         Args:
             incident_text: Narrative to pass to each field extractor.
-            modules: Dictionary of DSPy modules to execute.
+            modules: Dictionary of DSPy modules or LoadedFieldModule to execute.
 
         Returns:
             Dict mapping field name to predicted value.
@@ -166,10 +208,31 @@ class AsyncHazardExtractionService:
         ]
 
         loop = asyncio.get_event_loop()
-        tasks = [
-            loop.run_in_executor(self._executor, self._predict_single_field_sync, field, module, incident_text)
-            for field, module in ordered_items
-        ]
+
+        if self._use_mixed_providers:
+            # Per-field LM routing
+            tasks = [
+                loop.run_in_executor(
+                    self._executor,
+                    self._predict_single_field_with_lm_sync,
+                    field,
+                    cast(LoadedFieldModule, module_or_loaded),
+                    incident_text,
+                )
+                for field, module_or_loaded in ordered_items
+            ]
+        else:
+            # Single LM mode (legacy)
+            tasks = [
+                loop.run_in_executor(
+                    self._executor,
+                    self._predict_single_field_sync,
+                    field,
+                    cast(dspy.Module, module_or_loaded),
+                    incident_text,
+                )
+                for field, module_or_loaded in ordered_items
+            ]
 
         results = await asyncio.gather(*tasks)
         return dict(results)
@@ -197,10 +260,40 @@ class AsyncHazardExtractionService:
             logger.error(f"Error extracting field '{field}': {e}")
             return field, None
 
+    @staticmethod
+    def _predict_single_field_with_lm_sync(
+            field: str, loaded: LoadedFieldModule, incident_text: str
+    ) -> tuple[str, Any]:
+        """Run a single field extractor with its associated LM.
+
+        This method uses dspy.context() for thread-safe per-field LM configuration.
+
+        Args:
+            field: The schema field name.
+            loaded: LoadedFieldModule containing module, LM, and metadata.
+            incident_text: The input text for prediction.
+
+        Returns:
+            Tuple of (field_name, predicted_value).
+        """
+        try:
+            # Configure DSPy with this field's LM before prediction
+            with dspy.context(lm=loaded.lm):
+                prediction = loaded.module(incident_text=incident_text)
+            value = getattr(prediction, field, None)
+            logger.debug(f"[{field}] Predicted value: {value} (using {loaded.provider})")
+            return field, value
+        except Exception as e:
+            logger.error(f"Error extracting field '{field}' with {loaded.provider}: {e}")
+            return field, None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load the default extraction service during app startup.
+
+    Uses mixed-provider model selection by default (USE_MIXED_PROVIDERS=true),
+    which picks the best-performing model for each field based on evaluation scores.
 
     Args:
         app: The FastAPI application instance.
@@ -211,11 +304,22 @@ async def lifespan(app: FastAPI):
     app_state = getattr(app, "state")
 
     try:
-        service = AsyncHazardExtractionService.from_artifacts(allow_partial=True)
+        if USE_MIXED_PROVIDERS:
+            default_provider = os.environ.get("DEFAULT_PROVIDER", "openai")
+            service = AsyncHazardExtractionService.from_best_artifacts(
+                default_provider=default_provider,
+                allow_partial=True,
+            )
+            logger.info("Hazard extraction service initialized with mixed-provider model selection.")
+        else:
+            service = AsyncHazardExtractionService.from_artifacts(allow_partial=True)
+            logger.info("Hazard extraction service initialized with single provider.")
         app_state.extraction_service = service
-        logger.info("Hazard extraction service initialized successfully.")
     except FileNotFoundError as e:
         logger.critical(f"Failed to load artifacts: {e}")
+        app_state.extraction_service = None
+    except ValueError as e:
+        logger.critical(f"Configuration error: {e}")
         app_state.extraction_service = None
 
     yield
@@ -337,6 +441,6 @@ async def extract_endpoint(
         return _wrap_actions_payload(result)
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except Exception as exc:
+    except Exception:
         logger.exception("Extraction process failed")
         raise HTTPException(status_code=500, detail="Internal extraction error")
