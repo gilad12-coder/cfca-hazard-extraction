@@ -200,7 +200,7 @@ class MixedProviderLoader:
     def load_best_field_modules(
         self,
         fields: Optional[Sequence[str]] = None,
-        default_provider: str = "openai",
+        default_provider: str = "gemini",
     ) -> Dict[str, LoadedFieldModule]:
         """Load the best-scoring artifact for each field from any provider.
 

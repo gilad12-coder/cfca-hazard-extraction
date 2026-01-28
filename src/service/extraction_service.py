@@ -115,7 +115,7 @@ class AsyncHazardExtractionService:
     @classmethod
     def from_best_artifacts(
         cls,
-        default_provider: str = "openai",
+        default_provider: str = "gemini",
         allow_partial: bool = False,
     ) -> "AsyncHazardExtractionService":
         """Instantiate service by loading best-scoring artifacts from all providers.
@@ -305,7 +305,7 @@ async def lifespan(app: FastAPI):
 
     try:
         if USE_MIXED_PROVIDERS:
-            default_provider = os.environ.get("DEFAULT_PROVIDER", "openai")
+            default_provider = os.environ.get("DEFAULT_PROVIDER", "gemini")
             service = AsyncHazardExtractionService.from_best_artifacts(
                 default_provider=default_provider,
                 allow_partial=True,

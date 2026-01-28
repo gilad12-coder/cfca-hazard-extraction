@@ -36,7 +36,7 @@ class FieldSelection:
 class ModelSelector:
     """Select the best model provider for each field based on optimization scores."""
 
-    DEFAULT_PROVIDER = "openai"
+    DEFAULT_PROVIDER = "gemini"
 
     def __init__(
         self,
