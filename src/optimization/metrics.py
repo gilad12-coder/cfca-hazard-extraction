@@ -4,7 +4,7 @@ from typing import Mapping, Optional
 import dspy
 from loguru import logger
 
-from .config import TEACHER_LM
+from .config import get_teacher_lm_config
 
 NULL_STRINGS = {"null"}
 
@@ -70,7 +70,7 @@ class LLMJudge:
 
         self.field = field
         self.spec = spec
-        self.lm = lm or dspy.LM(**TEACHER_LM)
+        self.lm = lm or dspy.LM(**get_teacher_lm_config())
 
     def _render_prompt(self, expected: object, predicted: object) -> str:
         """Create the grading prompt for a semantic similarity score.

@@ -101,51 +101,14 @@ def get_provider_lm_config(provider: str) -> Dict[str, Any]:
         raise ValueError(f"Unknown provider: {provider}")
 
 
-def _get_inference_lm_config() -> Dict[str, Any]:
-    """Get inference LM config for the current MODEL_PROVIDER (lazy)."""
+def get_inference_lm_config() -> Dict[str, Any]:
+    """Get inference LM config for the current MODEL_PROVIDER."""
     return get_provider_lm_config(MODEL_PROVIDER)
 
 
-# Lazy property — resolved on first access, not at import time
-class _LazyLMConfig:
-    """Defer API key resolution until first access."""
-
-    def __init__(self, provider: str):
-        self._provider = provider
-        self._config: Dict[str, Any] | None = None
-
-    def _resolve(self) -> Dict[str, Any]:
-        if self._config is None:
-            self._config = get_provider_lm_config(self._provider)
-        return self._config
-
-    def __getitem__(self, key: str) -> Any:
-        return self._resolve()[key]
-
-    def __iter__(self):
-        return iter(self._resolve())
-
-    def keys(self):
-        return self._resolve().keys()
-
-    def values(self):
-        return self._resolve().values()
-
-    def items(self):
-        return self._resolve().items()
-
-    def __contains__(self, key: str) -> bool:
-        return key in self._resolve()
-
-    def __len__(self) -> int:
-        return len(self._resolve())
-
-    def get(self, key: str, default: Any = None) -> Any:
-        return self._resolve().get(key, default)
-
-
-INFERENCE_LM = _LazyLMConfig(MODEL_PROVIDER)
-TEACHER_LM = _LazyLMConfig(MODEL_PROVIDER)
+def get_teacher_lm_config() -> Dict[str, Any]:
+    """Get teacher LM config for the current MODEL_PROVIDER."""
+    return get_provider_lm_config(MODEL_PROVIDER)
 
 FIELD_BEHAVIORS: Dict[str, Dict[str, str]] = {
     FIELD_REPORT_TYPE: {"metric": "exact", "mode": "optimize"},
