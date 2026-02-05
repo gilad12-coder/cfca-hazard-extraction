@@ -219,28 +219,43 @@ class MixedProviderLoader:
         loaded: Dict[str, LoadedFieldModule] = {}
 
         for field, selection in selections.items():
-            artifact_path = selection.artifact_path
-            if not artifact_path.exists():
-                logger.warning(f"Artifact path does not exist: {artifact_path}")
-                continue
+            # Try selected provider first, then fallback to alternative
+            providers_to_try = [(selection.selected_provider, selection.artifact_path, selection.selected_score)]
+            if selection.alternative_provider:
+                alt_path = self.provider_roots[selection.alternative_provider] / field / self.stage
+                providers_to_try.append((selection.alternative_provider, alt_path, selection.alternative_score))
 
-            try:
-                lm = self._get_or_create_lm(selection.selected_provider)
-                dspy.configure(lm=lm)
-                module = dspy.load(artifact_path)
-                loaded[field] = LoadedFieldModule(
-                    field=field,
-                    module=module,
-                    provider=selection.selected_provider,
-                    lm=lm,
-                    score=selection.selected_score,
-                )
-                logger.debug(
-                    f"Loaded '{field}' from {selection.selected_provider} "
-                    f"(score={selection.selected_score:.4f})"
-                )
-            except Exception as e:
-                logger.error(f"Failed to load '{field}' from {selection.selected_provider}: {e}")
+            for provider, artifact_path, score in providers_to_try:
+                if not artifact_path.exists():
+                    logger.warning(f"Artifact path does not exist: {artifact_path}")
+                    continue
+
+                try:
+                    lm = self._get_or_create_lm(provider)
+                    dspy.configure(lm=lm)
+                    module = dspy.load(artifact_path)
+                    loaded[field] = LoadedFieldModule(
+                        field=field,
+                        module=module,
+                        provider=provider,
+                        lm=lm,
+                        score=score,
+                    )
+                    if provider != selection.selected_provider:
+                        logger.warning(
+                            f"Loaded '{field}' from fallback provider '{provider}' "
+                            f"(score={score:.4f}) - primary provider failed"
+                        )
+                    else:
+                        logger.debug(
+                            f"Loaded '{field}' from {provider} "
+                            f"(score={score:.4f})"
+                        )
+                    break  # Successfully loaded, stop trying
+                except Exception as e:
+                    logger.error(f"Failed to load '{field}' from {provider}: {e}")
+            else:
+                logger.error(f"Could not load '{field}' from any provider")
 
         # Log summary by provider
         provider_fields: Dict[str, list[str]] = {}
