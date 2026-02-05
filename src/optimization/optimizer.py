@@ -10,7 +10,7 @@ from dspy.teleprompt import GEPA
 from loguru import logger
 from pydantic import ValidationError
 
-from .config import FIELD_BEHAVIORS, INFERENCE_LM, TEACHER_LM
+from .config import FIELD_BEHAVIORS, get_inference_lm_config, get_teacher_lm_config
 from .constants import FIELD_SPECS, FIELDS
 from .data import HazardExample, dataset_from_records
 from .metrics import (
@@ -138,11 +138,11 @@ class HazardSchemaOptimizer:
             fields: Optional subset of fields to optimize.
             artifact_dir: Directory used to persist optimized programs.
         """
-        self.task_lm = task_lm or dspy.LM(**INFERENCE_LM)
+        self.task_lm = task_lm or dspy.LM(**get_inference_lm_config())
         dspy.configure(lm=self.task_lm)
         dspy.settings.configure(num_threads=1)
-        self.reflection_lm = reflection_lm or dspy.LM(**TEACHER_LM)
-        self.judge_lm = judge_lm or dspy.LM(**TEACHER_LM)
+        self.reflection_lm = reflection_lm or dspy.LM(**get_teacher_lm_config())
+        self.judge_lm = judge_lm or dspy.LM(**get_teacher_lm_config())
         self.track_stats = track_stats
         self.gepa_log_dir = gepa_log_dir
         self.field_behaviors = self._resolve_field_behaviors(fields)

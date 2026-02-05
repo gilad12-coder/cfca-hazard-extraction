@@ -8,7 +8,7 @@ from loguru import logger
 
 from ..optimization.config import (
     ARTIFACT_ROOTS,
-    INFERENCE_LM,
+    get_inference_lm_config,
     get_provider_lm_config,
 )
 from ..optimization.constants import FIELDS
@@ -46,7 +46,7 @@ def configure_inference_lm() -> None:
     global _lm_configured
     if _lm_configured:
         return
-    dspy.configure(lm=dspy.LM(**INFERENCE_LM))
+    dspy.configure(lm=dspy.LM(**get_inference_lm_config()))
     _lm_configured = True
 
 

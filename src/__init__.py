@@ -1,5 +1,5 @@
-from src.optimization.config import INFERENCE_LM as INFERENCE_LM
-from src.optimization.config import TEACHER_LM as TEACHER_LM
+from src.optimization.config import get_inference_lm_config as get_inference_lm_config
+from src.optimization.config import get_teacher_lm_config as get_teacher_lm_config
 from src.optimization.constants import FIELD_SPECS as FIELD_SPECS
 from src.optimization.constants import FIELDS as FIELDS
 from src.optimization.data import HazardExample as HazardExample
