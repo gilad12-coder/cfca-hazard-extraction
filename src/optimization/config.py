@@ -101,29 +101,51 @@ def get_provider_lm_config(provider: str) -> Dict[str, Any]:
         raise ValueError(f"Unknown provider: {provider}")
 
 
-# Legacy configs for backward compatibility (lazy evaluation)
-GEMINI_LM_CONFIG = {
-    "model": "gemini/gemini-3-flash-preview",
-    "max_tokens": 2048,
-    "temperature": 1.0,
-    "thinking_level": "minimal",
-    "api_key": _get_google_api_key() if MODEL_PROVIDER == "gemini" else None,
-}
+def _get_inference_lm_config() -> Dict[str, Any]:
+    """Get inference LM config for the current MODEL_PROVIDER (lazy)."""
+    return get_provider_lm_config(MODEL_PROVIDER)
 
-OPENAI_LM_CONFIG = {
-    "model": "openai/gpt-5-mini",
-    "max_tokens": 16000,
-    "temperature": 1.0,
-    "reasoning_effort": "low",
-    "api_key": _get_openai_api_key() if MODEL_PROVIDER == "openai" else None,
-}
 
-if MODEL_PROVIDER == "openai":
-    INFERENCE_LM = OPENAI_LM_CONFIG
-    TEACHER_LM = OPENAI_LM_CONFIG
-else:
-    INFERENCE_LM = GEMINI_LM_CONFIG
-    TEACHER_LM = GEMINI_LM_CONFIG
+# Lazy property — resolved on first access, not at import time
+class _LazyLMConfig:
+    """Defer API key resolution until first access."""
+
+    def __init__(self, provider: str):
+        self._provider = provider
+        self._config: Dict[str, Any] | None = None
+
+    def _resolve(self) -> Dict[str, Any]:
+        if self._config is None:
+            self._config = get_provider_lm_config(self._provider)
+        return self._config
+
+    def __getitem__(self, key: str) -> Any:
+        return self._resolve()[key]
+
+    def __iter__(self):
+        return iter(self._resolve())
+
+    def keys(self):
+        return self._resolve().keys()
+
+    def values(self):
+        return self._resolve().values()
+
+    def items(self):
+        return self._resolve().items()
+
+    def __contains__(self, key: str) -> bool:
+        return key in self._resolve()
+
+    def __len__(self) -> int:
+        return len(self._resolve())
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._resolve().get(key, default)
+
+
+INFERENCE_LM = _LazyLMConfig(MODEL_PROVIDER)
+TEACHER_LM = _LazyLMConfig(MODEL_PROVIDER)
 
 FIELD_BEHAVIORS: Dict[str, Dict[str, str]] = {
     FIELD_REPORT_TYPE: {"metric": "exact", "mode": "optimize"},
