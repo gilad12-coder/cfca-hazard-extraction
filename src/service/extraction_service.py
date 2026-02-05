@@ -168,7 +168,7 @@ class AsyncHazardExtractionService:
         if requested_fields:
             missing = [f for f in requested_fields if f not in self.field_modules]
             if missing:
-                raise ValueError(f"Artifacts missing for fields: {', '.join(missing)}")
+                logger.warning(f"No artifacts for fields: {', '.join(missing)}; returning empty values")
             modules_to_run = {k: v for k, v in self.field_modules.items() if k in requested_fields}
         else:
             modules_to_run = self.field_modules

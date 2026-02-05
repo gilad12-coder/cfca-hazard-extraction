@@ -224,13 +224,9 @@ class MixedProviderLoader:
                 logger.warning(f"Artifact path does not exist: {artifact_path}")
                 continue
 
-            # Get the LM for this provider
-            lm = self._get_or_create_lm(selection.selected_provider)
-
-            # Configure DSPy globally for this load operation
-            dspy.configure(lm=lm)
-
             try:
+                lm = self._get_or_create_lm(selection.selected_provider)
+                dspy.configure(lm=lm)
                 module = dspy.load(artifact_path)
                 loaded[field] = LoadedFieldModule(
                     field=field,
@@ -244,7 +240,7 @@ class MixedProviderLoader:
                     f"(score={selection.selected_score:.4f})"
                 )
             except Exception as e:
-                logger.error(f"Failed to load '{field}' from {artifact_path}: {e}")
+                logger.error(f"Failed to load '{field}' from {selection.selected_provider}: {e}")
 
         # Log summary by provider
         provider_fields: Dict[str, list[str]] = {}
