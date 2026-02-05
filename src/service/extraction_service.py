@@ -401,7 +401,7 @@ def _normalize_result_for_bot(result: Mapping[str, Any]) -> Dict[str, Any]:
     normalized: Dict[str, Any] = {}
     for field in FIELDS:
         value = result.get(field)
-        if value is None or value == "null":
+        if value is None or value in ("null", "None"):
             normalized[field] = ""
         else:
             normalized[field] = value
