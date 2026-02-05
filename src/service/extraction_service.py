@@ -253,12 +253,12 @@ class AsyncHazardExtractionService:
         """
         try:
             prediction = module(incident_text=incident_text)
-            value = getattr(prediction, field, None)
+            value = getattr(prediction, field, None) or ""
             logger.debug(f"[{field}] Predicted value: {value}")
             return field, value
         except Exception as e:
             logger.error(f"Error extracting field '{field}': {e}")
-            return field, None
+            return field, ""
 
     @staticmethod
     def _predict_single_field_with_lm_sync(
@@ -280,12 +280,12 @@ class AsyncHazardExtractionService:
             # Configure DSPy with this field's LM before prediction
             with dspy.context(lm=loaded.lm):
                 prediction = loaded.module(incident_text=incident_text)
-            value = getattr(prediction, field, None)
+            value = getattr(prediction, field, None) or ""
             logger.debug(f"[{field}] Predicted value: {value} (using {loaded.provider})")
             return field, value
         except Exception as e:
             logger.error(f"Error extracting field '{field}' with {loaded.provider}: {e}")
-            return field, None
+            return field, ""
 
 
 @asynccontextmanager
