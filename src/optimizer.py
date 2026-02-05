@@ -1,2 +1,3 @@
+from src.optimization.optimizer import HazardFieldProgram as HazardFieldProgram
 from src.optimization.optimizer import HazardSchemaOptimizer as HazardSchemaOptimizer
 from src.optimization.optimizer import HazardSchemaProgram as HazardSchemaProgram
