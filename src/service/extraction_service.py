@@ -402,7 +402,7 @@ def _normalize_result_for_bot(result: Mapping[str, Any]) -> Dict[str, Any]:
     for field in FIELDS:
         value = result.get(field)
         if value is None or value in ("null", "None"):
-            normalized[field] = ""
+            normalized[field] = "0" if field == "eventEnded" else ""
         else:
             normalized[field] = value
     return normalized

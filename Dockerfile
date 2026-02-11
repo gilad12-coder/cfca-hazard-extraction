@@ -16,14 +16,13 @@ RUN uv sync --frozen --no-dev
 # Copy application code
 COPY src/ ./src/
 
-# Copy both artifact directories (switch via ARTIFACTS_DIR env var)
-COPY artifacts_openai/ ./artifacts_openai/
+# Copy Gemini artifact directory
 COPY artifacts_gemini/ ./artifacts_gemini/
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=True
-# Default to OpenAI artifacts; override with -e ARTIFACTS_DIR=/app/artifacts_gemini
-ENV ARTIFACTS_DIR=/app/artifacts_openai
+ENV ARTIFACTS_DIR=/app/artifacts_gemini
+ENV USE_MIXED_PROVIDERS=false
 
 # Run the FastAPI app with Uvicorn (Cloud Run friendly)
 CMD ["uv", "run", "uvicorn", "src.service.extraction_service:app", "--host", "0.0.0.0", "--port", "8080"]
